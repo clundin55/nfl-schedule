@@ -1,28 +1,66 @@
 use anyhow::{Error, Result};
+use clap::Parser;
+use once_cell::sync::Lazy;
 use reqwest::get;
 use serde_json::Value;
+use std::collections::HashMap;
 
-const TOTAL_NFL_TEAMS: u32 = 32;
-const REGULAR_SEASON_WEEKS: u32 = 7;
+static TEAM_LOOK_UP: Lazy<HashMap<String, u32>> = Lazy::new(|| {
+    let mut m = HashMap::new();
+    m.insert("ATL".to_string(), 1);
+    m.insert("BUF".to_string(), 2);
+    m.insert("CHI".to_string(), 3);
+    m.insert("CIN".to_string(), 4);
+    m.insert("CLE".to_string(), 5);
+    m.insert("DAL".to_string(), 6);
+    m.insert("DEN".to_string(), 7);
+    m.insert("DET".to_string(), 8);
+    m.insert("GB".to_string(), 9);
+    m.insert("TEN".to_string(), 10);
+    m.insert("IND".to_string(), 11);
+    m.insert("KC".to_string(), 12);
+    m.insert("LV".to_string(), 13);
+    m.insert("LAR".to_string(), 14);
+    m.insert("MIA".to_string(), 15);
+    m.insert("MIN".to_string(), 16);
+    m.insert("NE".to_string(), 17);
+    m.insert("NO".to_string(), 18);
+    m.insert("NYG".to_string(), 19);
+    m.insert("NYJ".to_string(), 20);
+    m.insert("PHI".to_string(), 21);
+    m.insert("ARI".to_string(), 22);
+    m.insert("PIT".to_string(), 23);
+    m.insert("LAC".to_string(), 24);
+    m.insert("SF".to_string(), 25);
+    m.insert("SEA".to_string(), 26);
+    m.insert("TB".to_string(), 28);
+    m.insert("WSH".to_string(), 29);
+    m.insert("CAR".to_string(), 30);
+    m.insert("JAX".to_string(), 31);
+    m
+});
 
-#[derive(Debug, Clone)]
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    #[arg(short, long)]
+    team: String,
+    #[arg(short, long)]
+    week: Option<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 struct Team(String);
 
 impl Team {
-    fn from_unstructed_json(data: &str) -> Result<Self, Error> {
-        let json: Value = serde_json::from_str(data)?;
-        let abbrev = json
-            .get("team")
-            .and_then(|team| team.get("abbreviation"))
-            .and_then(|abbrev| abbrev.as_str());
-
-        if let Some(abbrev) = abbrev {
-            return Ok(Self(abbrev.to_string()));
-        }
-        Err(anyhow::anyhow!("Could not determine the NFL team."))
-    }
     fn from_str(name: &str) -> Self {
-        Self(name.to_string())
+        Self(name.to_string().to_uppercase())
+    }
+}
+
+impl std::fmt::Display for Team {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
@@ -33,10 +71,18 @@ struct TeamMatchUp {
 
 impl TeamMatchUp {
     fn new(matchup: String) -> Self {
-        Self {matchup}
+        Self { matchup }
     }
     fn from_str(matchup: &str) -> Self {
-        Self{matchup: matchup.to_string()}
+        Self {
+            matchup: matchup.to_string(),
+        }
+    }
+}
+
+impl std::fmt::Display for TeamMatchUp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.matchup)
     }
 }
 
@@ -64,22 +110,33 @@ impl Schedule {
                 .collect();
             return Ok(Self { matchups });
         }
-        Err(anyhow::anyhow!("Could not determine the NFL team's schedule."))
+        Err(anyhow::anyhow!(
+            "Could not determine the NFL team's schedule."
+        ))
+    }
+}
+
+impl std::fmt::Display for Schedule {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (i, matchup) in self.matchups.iter().enumerate() {
+            write!(f, "Week {}: {}\n", i + 1, matchup)?;
+        }
+        write!(f, "")
     }
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let espn_data =
-        get("https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/27/schedule")
-            .await?
-            .text()
-            .await?;
-    let team = Team::from_unstructed_json(&espn_data)?;
-    let schedule = Schedule::from_unstructed_json(&team, &espn_data)?;
-
-    //println!("{espn_data}");
-    println!("{team:#?}");
-    println!("{schedule:#?}");
+    let args = Args::parse();
+    if let Some(team_code) = TEAM_LOOK_UP.get(&args.team.to_uppercase()) {
+        let desired_team = Team::from_str(&args.team);
+        let url = format!(
+            "https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/{team_code}/schedule"
+        );
+        let espn_data = get(url).await?.text().await?;
+        let schedule = Schedule::from_unstructed_json(&desired_team, &espn_data)?;
+        println!("{schedule}");
+        return Ok(());
+    }
     Ok(())
 }
