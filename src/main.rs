@@ -71,7 +71,7 @@ impl Schedule {
 #[tokio::main]
 async fn main() -> Result<()> {
     let espn_data =
-        get("https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/4/schedule")
+        get("https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/27/schedule")
             .await?
             .text()
             .await?;
