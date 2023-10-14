@@ -70,9 +70,6 @@ struct TeamMatchUp {
 }
 
 impl TeamMatchUp {
-    fn new(matchup: String) -> Self {
-        Self { matchup }
-    }
     fn from_str(matchup: &str) -> Self {
         Self {
             matchup: matchup.to_string(),
@@ -87,13 +84,36 @@ impl std::fmt::Display for TeamMatchUp {
 }
 
 #[derive(Debug)]
+struct ByeWeek {
+    week: usize,
+}
+impl ByeWeek {
+    fn is_bye_week(&self, week: usize) -> bool {
+        return self.week == week;
+    }
+    fn from_unstructed_json(data: &str) -> Result<Self, Error> {
+        let json: Value = serde_json::from_str(data)?;
+        let week = json.get("byeWeek").and_then(|raw_data| raw_data.as_u64());
+        if let Some(week) = week {
+            let week: usize = week.try_into()?;
+            return Ok(Self { week });
+        }
+        Err(anyhow::anyhow!(
+            "Could not determine the NFL team's bye week."
+        ))
+    }
+}
+
+#[derive(Debug)]
 struct Schedule {
     matchups: Vec<TeamMatchUp>,
+    bye: ByeWeek,
 }
 
 impl Schedule {
-    fn from_unstructed_json(home_team: &Team, data: &str) -> Result<Self, Error> {
+    fn from_unstructed_json(data: &str) -> Result<Self, Error> {
         let json: Value = serde_json::from_str(data)?;
+        let bye = ByeWeek::from_unstructed_json(data)?;
         let matchups = json
             .get("events")
             .and_then(|events| events.as_array())
@@ -108,7 +128,7 @@ impl Schedule {
                     None
                 })
                 .collect();
-            return Ok(Self { matchups });
+            return Ok(Self { matchups, bye });
         }
         Err(anyhow::anyhow!(
             "Could not determine the NFL team's schedule."
@@ -118,8 +138,14 @@ impl Schedule {
 
 impl std::fmt::Display for Schedule {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for (i, matchup) in self.matchups.iter().enumerate() {
-            write!(f, "Week {}: {}\n", i + 1, matchup)?;
+        let mut curr_week = 1;
+        for matchup in &self.matchups {
+            if self.bye.is_bye_week(curr_week) {
+                write!(f, "Week {}: Bye\n", curr_week)?;
+                curr_week += 1
+            }
+            write!(f, "Week {}: {}\n", curr_week, matchup)?;
+            curr_week += 1
         }
         write!(f, "")
     }
@@ -129,12 +155,11 @@ impl std::fmt::Display for Schedule {
 async fn main() -> Result<()> {
     let args = Args::parse();
     if let Some(team_code) = TEAM_LOOK_UP.get(&args.team.to_uppercase()) {
-        let desired_team = Team::from_str(&args.team);
         let url = format!(
             "https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/{team_code}/schedule"
         );
         let espn_data = get(url).await?.text().await?;
-        let schedule = Schedule::from_unstructed_json(&desired_team, &espn_data)?;
+        let schedule = Schedule::from_unstructed_json(&espn_data)?;
         println!("{schedule}");
         return Ok(());
     }
