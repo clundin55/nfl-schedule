@@ -135,7 +135,7 @@ impl std::fmt::Display for Schedule {
         let mut curr_week = 1;
         for matchup in &self.matchups {
             if self.bye.is_bye_week(curr_week) {
-                writeln!(f, "Week {}: Bye", curr_week)?;
+                writeln!(f, "\x1b[93mWeek {}: Bye\x1b[0m", curr_week)?;
                 curr_week += 1
             }
             writeln!(f, "Week {}: {}", curr_week, matchup)?;
