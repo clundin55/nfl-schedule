@@ -52,12 +52,6 @@ struct Args {
 #[derive(Debug, Clone, PartialEq)]
 struct Team(String);
 
-impl Team {
-    fn from_str(name: &str) -> Self {
-        Self(name.to_string().to_uppercase())
-    }
-}
-
 impl std::fmt::Display for Team {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
@@ -89,7 +83,7 @@ struct ByeWeek {
 }
 impl ByeWeek {
     fn is_bye_week(&self, week: usize) -> bool {
-        return self.week == week;
+        self.week == week
     }
     fn from_unstructed_json(data: &str) -> Result<Self, Error> {
         let json: Value = serde_json::from_str(data)?;
@@ -117,7 +111,7 @@ impl Schedule {
         let matchups = json
             .get("events")
             .and_then(|events| events.as_array())
-            .and_then(|events| Some(events.iter().filter_map(|event| event.get("shortName"))));
+            .map(|events| events.iter().filter_map(|event| event.get("shortName")));
 
         if let Some(matchups) = matchups {
             let matchups = matchups
@@ -141,10 +135,10 @@ impl std::fmt::Display for Schedule {
         let mut curr_week = 1;
         for matchup in &self.matchups {
             if self.bye.is_bye_week(curr_week) {
-                write!(f, "Week {}: Bye\n", curr_week)?;
+                writeln!(f, "\x1b[93mWeek {}: Bye\x1b[0m", curr_week)?;
                 curr_week += 1
             }
-            write!(f, "Week {}: {}\n", curr_week, matchup)?;
+            writeln!(f, "Week {}: {}", curr_week, matchup)?;
             curr_week += 1
         }
         write!(f, "")
